@@ -1,0 +1,9 @@
+# Ignore large data files and raw/processed CSVs
+data/raw/*.csv
+data/processed/*.csv
+data/*.csv
+
+# Python cache & Jupyter checkpoints
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
