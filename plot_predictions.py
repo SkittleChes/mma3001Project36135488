@@ -1,99 +1,178 @@
-"""Combined Forecasting & Uncertainty Quantification Master Plot
+"""Master Probabilistic & Point Forecasting Plotting Script (plot_predictions.py)
 
-Generated a professional dual-panel figure showing:
-  - Top Panel: Point forecast comparison (Actual vs. HistGradientBoosting vs. Baseline)
-  - Bottom Panel: Probabilistic uncertainty quantification (Q50 Median + Q10-Q90 Prediction Interval)
+Generates a publication-quality, high-visibility dual-panel figure combining 
+point forecasts against actual temperatures (Panel A) and probabilistic quantile 
+confidence bands (Panel B) for Sensor 869. Optimized for readability across all screen sizes.
 """
 
 from pathlib import Path
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 from src.features import make_dataset
 from src.forecasting import make_models, make_quantile_models, split_train_test
 
-# 1. Load data and setup Sensor 869 (3h horizon)
+# --- GLOBAL STYLING FOR SMALL-SCREEN READABILITY ---
+plt.rcParams.update({
+    "font.size": 11,
+    "axes.labelsize": 13,
+    "axes.titlesize": 14,
+    "xtick.labelsize": 11,
+    "ytick.labelsize": 11,
+    "legend.fontsize": 11,
+    "figure.titlesize": 16,
+    "lines.linewidth": 2.2,
+    "axes.linewidth": 1.2,
+    "grid.linewidth": 0.8,
+})
+
+# 1. Load data and setup Sensor 869
 data_path = Path("data/processed/env_long.parquet")
 if not data_path.exists():
     raise FileNotFoundError(f"Processed data not found at {data_path}. Run data_loading.py first.")
 
 df_long = pd.read_parquet(data_path)
+
 sensor_id = 6012002000869
 test_start_str = "2024-05-20"
-horizon_steps = 18
+horizon_steps = 18  # 3-hour horizon (18 x 10-min steps)
 
-print(f"Generating combined point & quantile forecast visualization for Sensor {sensor_id}...")
+print(f"Generating high-visibility probabilistic forecast plots for Sensor {sensor_id}...")
 sensor_df = df_long[df_long["sensorid"] == sensor_id].reset_index()
-wide = sensor_df.pivot_table(index="time", columns="variable", values="value").sort_index()
+wide = (
+    sensor_df.pivot_table(index="time", columns="variable", values="value")
+    .sort_index()
+)
 
-X, y = make_dataset(wide, target="Temperature", horizon=horizon_steps, same_time_yesterday=True)
+X, y = make_dataset(
+    wide, target="Temperature", horizon=horizon_steps, same_time_yesterday=True
+)
 
 test_start_ts = pd.Timestamp(test_start_str)
 if X.index.tz is not None and test_start_ts.tz is None:
-    test_start_ts = test_start_ts.tz_localize(X.index.tz)
+  test_start_ts = test_start_ts.tz_localize(X.index.tz)
 
 X_tr, y_tr, X_te, y_te = split_train_test(X, y, test_start_ts, horizon_steps)
 
-# 2. Train standard point model (HistGradientBoosting)
+# 2. Train models (Point forecast & Quantiles)
 models = make_models()
-point_model = models["hist_gb"]
-point_model.fit(X_tr, y_tr - X_tr["Temperature"])
-point_pred = X_te["Temperature"] + point_model.predict(X_te)
+y_tr_change = y_tr - X_tr["Temperature"]
 
-# 3. Train quantile models (Q10, Q50, Q90)
+# Point forecast model
+model_point = models["hist_gb"]
+model_point.fit(X_tr, y_tr_change)
+pred_change_te = model_point.predict(X_te)
+pred_te = X_te["Temperature"] + pred_change_te
+
+# Quantile models for uncertainty bounds (Q10 and Q90)
 q_models = make_quantile_models()
-q_preds = {}
-for q_name, model in q_models.items():
-    model.fit(X_tr, y_tr - X_tr["Temperature"])
-    q_preds[q_name] = X_te["Temperature"] + model.predict(X_te)
+q_models["q10"].fit(X_tr, y_tr_change)
+q_models["q90"].fit(X_tr, y_tr_change)
 
-# 4. Assemble evaluation dataframe & select a clean 3-day visual window
-eval_df = pd.DataFrame({
-    "Actual": y_te,
-    "PointPred": point_pred,
-    "Persistence": X_te["Temperature"],  # Baseline comparison
-    "Q10": q_preds["q10"],
-    "Q50": q_preds["q50"],
-    "Q90": q_preds["q90"],
-}, index=X_te.index)
+q10_te = X_te["Temperature"] + q_models["q10"].predict(X_te)
+q90_te = X_te["Temperature"] + q_models["q90"].predict(X_te)
 
-slice_steps = 72 * 6  # 3 days on a 10-minute grid
-df_slice = eval_df.iloc[:slice_steps]
+# 3. Zoom in on a clean 3-day evaluation window
+zoom_days = 3
+zoom_steps = zoom_days * 144  # 144 steps per day at 10-min intervals
+eval_index = X_te.index[:zoom_steps]
+actual_zoom = y_te.iloc[:zoom_steps]
+pred_zoom = pred_te.iloc[:zoom_steps]
+q10_zoom = q10_te.iloc[:zoom_steps]
+q90_zoom = q90_te.iloc[:zoom_steps]
 
-# 5. Create Dual-Panel Master Figure with perfect breathing room
-fig, axes = plt.subplots(2, 1, figsize=(12, 9.5), dpi=300, sharex=True)
+# 4. Create Dual-Panel Master Figure with automatic constrained layout spacing
+fig, axes = plt.subplots(2, 1, figsize=(12, 10), dpi=300, constrained_layout=True)
 
-# --- Top Panel: Point Forecast Accuracy ---
-axes[0].plot(df_slice.index, df_slice["Actual"], label="Actual Temperature", color="black", linewidth=1.5, alpha=0.8)
-axes[0].plot(df_slice.index, df_slice["PointPred"], label="HistGradientBoosting (Point Forecast)", color="#1f77b4", linewidth=1.5)
-axes[0].plot(df_slice.index, df_slice["Persistence"], label="Persistence Baseline", color="#ff7f0e", linestyle="--", linewidth=1, alpha=0.7)
-axes[0].set_title("A. Deterministic Point Forecast vs. Operational Baseline (3h Horizon)", fontsize=11, fontweight="bold", pad=12)
-axes[0].set_ylabel("Temperature (°C)", fontsize=10, labelpad=8)
-axes[0].legend(frameon=True, facecolor="white", edgecolor="#cccccc", fontsize=9, loc="upper left")
-axes[0].grid(True, linestyle=":", alpha=0.6)
-
-# --- Bottom Panel: Probabilistic Uncertainty Bands ---
-axes[1].plot(df_slice.index, df_slice["Actual"], label="Actual Temperature", color="black", linewidth=1.5, alpha=0.8)
-axes[1].plot(df_slice.index, df_slice["Q50"], label="Median Forecast (Q50)", color="#2ca02c", linewidth=1.5)
-axes[1].fill_between(
-    df_slice.index, df_slice["Q10"], df_slice["Q90"], 
-    color="#2ca02c", alpha=0.2, label="80% Prediction Interval [Q10 - Q90]"
+# --- PANEL A: Point Forecast vs Actuals ---
+axes[0].plot(
+    eval_index,
+    actual_zoom,
+    label="Actual Temperature",
+    color="#2ca02c",
+    linestyle="-",
+    alpha=0.9,
 )
-axes[1].set_title("B. Probabilistic Uncertainty Bounds & Risk Quantiles", fontsize=11, fontweight="bold", pad=12)
-axes[1].set_xlabel("Datetime (Australia/Melbourne)", fontsize=10, labelpad=8)
-axes[1].set_ylabel("Temperature (°C)", fontsize=10, labelpad=8)
-axes[1].legend(frameon=True, facecolor="white", edgecolor="#cccccc", fontsize=9, loc="upper left")
+axes[0].plot(
+    eval_index,
+    pred_zoom,
+    label=r"Model Point Forecast ($\hat{y}$)",
+    color="#1f77b4",
+    linestyle="--",
+    alpha=0.9,
+)
+axes[0].set_title(
+    "A. Point Forecast Comparison (3-Hour Horizon)",
+    fontweight="bold",
+    pad=8,
+    loc="left",
+)
+axes[0].set_ylabel(r"Temperature ($^\circ\text{C}$)", labelpad=8)
+axes[0].grid(True, linestyle=":", alpha=0.6)
+axes[0].legend(
+    loc="upper right",
+    frameon=True,
+    facecolor="white",
+    edgecolor="#cccccc",
+    framealpha=0.95,
+)
+axes[0].tick_params(axis="x", rotation=10)
+
+# --- PANEL B: Probabilistic Quantile Uncertainty Bands ---
+axes[1].plot(
+    eval_index,
+    actual_zoom,
+    label="Actual Temperature",
+    color="#2ca02c",
+    linestyle="-",
+    alpha=0.9,
+)
+axes[1].plot(
+    eval_index,
+    pred_zoom,
+    label=r"Median Forecast ($Q_{50}$)",
+    color="#1f77b4",
+    linestyle="--",
+    alpha=0.9,
+)
+axes[1].fill_between(
+    eval_index,
+    q10_zoom,
+    q90_zoom,
+    color="#ff7f0e",
+    alpha=0.25,
+    label=r"80% Prediction Interval ($Q_{10} - Q_{90}$)",
+)
+axes[1].set_title(
+    "B. Probabilistic Uncertainty Quantification & Quantile Bands",
+    fontweight="bold",
+    pad=8,
+    loc="left",
+)
+axes[1].set_xlabel("Datetime (Australia/Melbourne)", labelpad=8)
+axes[1].set_ylabel(r"Temperature ($^\circ\text{C}$)", labelpad=8)
 axes[1].grid(True, linestyle=":", alpha=0.6)
-axes[1].tick_params(axis='x', rotation=15)
+axes[1].legend(
+    loc="upper right",
+    frameon=True,
+    facecolor="white",
+    edgecolor="#cccccc",
+    framealpha=0.95,
+)
+axes[1].tick_params(axis="x", rotation=10)
 
-# Overall Title & Layout Adjustments (Pushed subplots down so title has ample room)
-fig.suptitle("Sensor 869: Comprehensive Thermal Forecasting & Risk Quantification Suite", fontsize=12, fontweight="bold", y=0.96)
-plt.subplots_adjust(top=0.82, hspace=0.35)
+# --- SUPER-TITLE ---
+fig.suptitle(
+    "Sensor 869: Multi-Step Thermal Forecasting & Risk Profiles",
+    fontsize=16,
+    fontweight="bold",
+)
 
-# Save to outputs directory
+# Save high-resolution graphic
 output_dir = Path("outputs")
 output_dir.mkdir(parents=True, exist_ok=True)
-plot_path = output_dir / "sensor_869_comprehensive_forecast.png"
+plot_path = output_dir / "sensor_869_probabilistic_forecast.png"
 plt.savefig(plot_path, bbox_inches="tight")
-print(f"Successfully generated and saved master forecast plot to: {plot_path}")
+print(f"Successfully generated and saved publication-grade master plot to: {plot_path}")
 plt.show()
