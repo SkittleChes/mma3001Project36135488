@@ -52,24 +52,24 @@ for rate in dropout_rates:
     maes.append(metrics["MAE"])
     rmses.append(metrics["RMSE"])
 
-# 3. Plot robustness curve
+# 3. Plot robustness curve with constrained layout and slightly smaller fonts
 rates_percent = [int(r * 100) for r in dropout_rates]
 
-plt.figure(figsize=(9, 5), dpi=300)
+plt.figure(figsize=(9, 5), dpi=300, constrained_layout=True)
 plt.plot(rates_percent, maes, marker="o", linestyle="-", color="#1f77b4", linewidth=2, label="MAE (°C)")
 plt.plot(rates_percent, rmses, marker="s", linestyle="--", color="#ff7f0e", linewidth=2, label="RMSE (°C)")
 
-plt.title("Sensor 869: Model Robustness Under Simulated IoT Sensor Dropout", fontsize=13, fontweight="bold", pad=12)
-plt.xlabel("Auxiliary Feature Dropout Rate (%)", fontsize=11, labelpad=8)
-plt.ylabel("Error Metric (°C)", fontsize=11, labelpad=8)
-plt.xticks(rates_percent)
-plt.legend(frameon=True, facecolor="white", edgecolor="none", fontsize=10)
+plt.title("Sensor 869: Robustness Under Sensor Dropout", fontsize=11, fontweight="bold", pad=12)
+plt.xlabel("Auxiliary Feature Dropout Rate (%)", fontsize=10, labelpad=8)
+plt.ylabel("Error Metric (°C)", fontsize=10, labelpad=8)
+plt.xticks(rates_percent, fontsize=9)
+plt.yticks(fontsize=9)
+plt.legend(frameon=True, facecolor="white", edgecolor="none", fontsize=9)
 plt.grid(True, linestyle=":", alpha=0.6)
-plt.tight_layout()
 
 output_dir = Path("outputs")
 output_dir.mkdir(parents=True, exist_ok=True)
 plot_path = output_dir / "sensor_869_robustness_curve.png"
-plt.savefig(plot_path)
+plt.savefig(plot_path, bbox_inches="tight")
 print(f"Successfully generated and saved robustness curve to: {plot_path}")
 plt.show()

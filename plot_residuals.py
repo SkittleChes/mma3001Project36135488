@@ -1,7 +1,7 @@
-"""Residual Error Distribution Analysis Script
+"""Residual Error Distribution Analysis Script (plot_residuals.py)
 
 Generates clean diagnostic plots examining model residuals (Actual minus Predicted) 
-to evaluate error bias and variance over the test horizon.
+with halved text sizes, maximized graph dimensions, and zero overlapping.
 """
 
 from pathlib import Path
@@ -12,8 +12,24 @@ import pandas as pd
 from src.features import make_dataset
 from src.forecasting import fit_predict, make_models, split_train_test
 
+# --- ULTRA-COMPACT STYLING FOR MAXIMIZED GRAPHS & TINY TEXT ---
+plt.rcParams.update({
+    "font.size": 5,
+    "axes.labelsize": 5.5,
+    "axes.titlesize": 6.5,
+    "xtick.labelsize": 4.5,
+    "ytick.labelsize": 4.5,
+    "figure.titlesize": 8,
+    "lines.linewidth": 1.2,
+    "axes.linewidth": 0.8,
+    "grid.linewidth": 0.4,
+})
+
 # 1. Load data and setup
 data_path = Path("data/processed/env_long.parquet")
+if not data_path.exists():
+    raise FileNotFoundError(f"Processed data not found at {data_path}. Run data_loading.py first.")
+
 df_long = pd.read_parquet(data_path)
 
 sensor_id = 6012002000869
@@ -38,33 +54,38 @@ pred_te, _, _ = fit_predict(model, X_tr, y_tr, X_te, target="Temperature")
 # 3. Calculate residuals
 residuals = y_te - pred_te
 
-# 4. Create dual-panel residual plot with proper top margin
-fig, axes = plt.subplots(1, 2, figsize=(14, 5), dpi=300)
+# 4. Create dual-panel residual plot with maximized dimensions and constrained layout
+fig, axes = plt.subplots(1, 2, figsize=(15, 8), dpi=300, constrained_layout=True)
 
 # Panel A: Residuals over time
-axes[0].plot(X_te.index, residuals, color="#d62728", alpha=0.6, linewidth=1)
-axes[0].axhline(0, color="black", linestyle="--", linewidth=1)
-axes[0].set_title("Forecast Residuals Over Time ($Actual - Predicted$)", fontsize=11, fontweight="bold", pad=10)
-axes[0].set_xlabel("Datetime (Australia/Melbourne)", fontsize=10, labelpad=8)
-axes[0].set_ylabel("Residual Error (°C)", fontsize=10, labelpad=8)
+axes[0].plot(X_te.index, residuals, color="#d62728", alpha=0.6, linewidth=1.2)
+axes[0].axhline(0, color="black", linestyle="--", linewidth=0.8)
+axes[0].set_title("Forecast Residuals Over Time", fontweight="bold", pad=4)
+axes[0].set_xlabel("Datetime (Australia/Melbourne)", labelpad=4)
+axes[0].set_ylabel("Residual Error (°C)", labelpad=4)
 axes[0].grid(True, linestyle=":", alpha=0.6)
-axes[0].tick_params(axis='x', rotation=20)
+axes[0].tick_params(axis='x', rotation=15)
 
 # Panel B: Error distribution histogram
 axes[1].hist(residuals, bins=50, color="#1f77b4", edgecolor="white", alpha=0.8, density=True)
-axes[1].axvline(0, color="black", linestyle="--", linewidth=1)
-axes[1].set_title("Distribution of Prediction Errors", fontsize=11, fontweight="bold", pad=10)
-axes[1].set_xlabel("Error Magnitude (°C)", fontsize=10, labelpad=8)
-axes[1].set_ylabel("Density", fontsize=10, labelpad=8)
+axes[1].axvline(0, color="black", linestyle="--", linewidth=0.8)
+axes[1].set_title("Distribution of Prediction Errors", fontweight="bold", pad=4)
+axes[1].set_xlabel("Error Magnitude (°C)", labelpad=4)
+axes[1].set_ylabel("Density", labelpad=4)
 axes[1].grid(True, linestyle=":", alpha=0.6)
 
-# Perfectly positioned main title and top margin
-fig.suptitle("Sensor 869: Residual Diagnostics & Error Distribution (3h Horizon)", fontsize=13, fontweight="bold", y=0.96)
-plt.subplots_adjust(top=0.85)
+# Wrapped super-title to fit perfectly without clipping
+fig.suptitle(
+    "Sensor 869: Residual Diagnostics & Error Distribution\n(3h Horizon)", 
+    fontsize=8, 
+    fontweight="bold",
+    ha="center"
+)
 
+# Save plot to outputs directory
 output_dir = Path("outputs")
 output_dir.mkdir(parents=True, exist_ok=True)
 plot_path = output_dir / "sensor_869_residuals.png"
-plt.savefig(plot_path, bbox_inches="tight")
-print(f"Successfully generated and saved perfectly framed residual plot to: {plot_path}")
+plt.savefig(plot_path)
+print(f"Successfully generated and saved maximized residual plot to: {plot_path}")
 plt.show()

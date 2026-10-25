@@ -1,7 +1,7 @@
-"""Feature Importance Visualization Script
+"""Feature Importance Visualization Script (plot_feature_importance.py)
 
 Computes and plots permutation feature importance for the HistGradientBoosting model 
-to quantify which input variables drive multi-step temperature forecasts.
+with ultra-compact text sizes, maximized graph dimensions, and fully framed titles.
 """
 
 from pathlib import Path
@@ -13,8 +13,24 @@ from sklearn.inspection import permutation_importance
 from src.features import make_dataset
 from src.forecasting import fit_predict, make_models, split_train_test
 
+# --- ULTRA-COMPACT STYLING FOR MAXIMIZED GRAPHS & TINY TEXT ---
+plt.rcParams.update({
+    "font.size": 5,
+    "axes.labelsize": 5.5,
+    "axes.titlesize": 6.5,
+    "xtick.labelsize": 4.5,
+    "ytick.labelsize": 4.5,
+    "figure.titlesize": 8,
+    "lines.linewidth": 1.2,
+    "axes.linewidth": 0.8,
+    "grid.linewidth": 0.4,
+})
+
 # 1. Load data and setup Sensor 869
 data_path = Path("data/processed/env_long.parquet")
+if not data_path.exists():
+    raise FileNotFoundError(f"Processed data not found at {data_path}. Run data_loading.py first.")
+
 df_long = pd.read_parquet(data_path)
 
 sensor_id = 6012002000869
@@ -51,17 +67,17 @@ importance_df = pd.DataFrame({
     "Importance Std": result.importances_std,
 }).sort_values(by="Importance Mean", ascending=True)
 
-# Plot top 10 most important features
+# Plot top 10 most important features with constrained layout & maximized dimensions
 top_features = importance_df.tail(10)
 
-plt.figure(figsize=(10, 6), dpi=300)
-plt.barh(top_features["Feature"], top_features["Importance Mean"], xerr=top_features["Importance Std"], color="#1f77b4", alpha=0.85, capsize=4)
-plt.title("Sensor 869: Top 10 Feature Importances (Permutation Analysis)", fontsize=13, fontweight="bold", pad=12)
-plt.xlabel("Mean Importance Score (Decrease in Model Accuracy)", fontsize=11, labelpad=8)
-plt.ylabel("Feature Name", fontsize=11, labelpad=8)
-plt.grid(True, axis="x", linestyle=":", alpha=0.6)
-plt.tight_layout()
+fig, ax = plt.subplots(figsize=(15, 8), dpi=300, constrained_layout=True)
+ax.barh(top_features["Feature"], top_features["Importance Mean"], xerr=top_features["Importance Std"], color="#1f77b4", alpha=0.85, capsize=3)
+ax.set_title("Sensor 869: Top 10 Feature Importances (Permutation Analysis)", fontweight="bold", pad=6)
+ax.set_xlabel("Mean Importance Score (Decrease in Model Accuracy)", labelpad=6)
+ax.set_ylabel("Feature Name", labelpad=6)
+ax.grid(True, axis="x", linestyle=":", alpha=0.6)
 
+# Save high-resolution graphic
 output_dir = Path("outputs")
 output_dir.mkdir(parents=True, exist_ok=True)
 plot_path = output_dir / "sensor_869_feature_importance.png"
